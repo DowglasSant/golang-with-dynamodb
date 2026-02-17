@@ -4,8 +4,8 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
-	"strings"
 
 	"github.com/dowglassantana/golang-with-dynamodb/internal/entity"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/service"
@@ -15,16 +15,21 @@ import (
 var indexHTML embed.FS
 
 type UserHandler struct {
-	service *service.UserService
+	service service.UserService
 }
 
-func NewUserHandler(service *service.UserService) *UserHandler {
+func NewUserHandler(service service.UserService) *UserHandler {
 	return &UserHandler{service: service}
 }
 
 func (h *UserHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		data, _ := indexHTML.ReadFile("static/index.html")
+		data, err := indexHTML.ReadFile("static/index.html")
+		if err != nil {
+			log.Printf("erro ao ler index.html embutido: %v", err)
+			http.Error(w, "erro interno", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(data)
 	})
@@ -42,13 +47,12 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Email) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name e email sao obrigatorios"})
-		return
-	}
-
 	user, err := h.service.Create(r.Context(), input)
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidInput) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -91,12 +95,11 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Email) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name e email sao obrigatorios"})
-		return
-	}
-
 	if err := h.service.Update(r.Context(), id, input); err != nil {
+		if errors.Is(err, service.ErrInvalidInput) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -112,7 +115,7 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusNoContent, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {

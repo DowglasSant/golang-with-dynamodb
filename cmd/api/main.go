@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/handler"
@@ -20,6 +23,11 @@ func main() {
 	env := os.Getenv("ENV")
 	if env == "" {
 		env = "local"
+	}
+
+	tableName := os.Getenv("DYNAMO_TABLE")
+	if tableName == "" {
+		tableName = "Users"
 	}
 
 	var (
@@ -42,7 +50,7 @@ func main() {
 		log.Fatalf("erro ao criar client DynamoDB: %v", err)
 	}
 
-	repo := repository.NewUserRepository(client)
+	repo := repository.NewUserRepository(client, tableName)
 
 	if err := repo.CreateTable(ctx); err != nil {
 		log.Printf("aviso ao criar tabela (pode ja existir): %v", err)
@@ -55,6 +63,32 @@ func main() {
 	userHandler.RegisterRoutes(mux)
 
 	addr := ":8080"
+	server := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+
+	// Graceful shutdown: ao receber SIGINT ou SIGTERM, o servidor para de aceitar
+	// novas conexoes e aguarda ate 10 segundos para as requests em andamento finalizarem.
+	// No ECS Fargate, o container recebe SIGTERM antes de ser encerrado.
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigChan
+		log.Printf("sinal recebido: %v. Encerrando servidor...", sig)
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("erro ao encerrar servidor: %v", err)
+		}
+	}()
+
 	fmt.Printf("Servidor rodando em http://localhost%s (env=%s)\n", addr, env)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatalf("erro no servidor: %v", err)
+	}
+
+	log.Println("servidor encerrado com sucesso")
 }

@@ -13,17 +13,27 @@ import (
 	"github.com/dowglassantana/golang-with-dynamodb/internal/entity"
 )
 
-const tableName = "Users"
-
-type UserRepository struct {
-	client *dynamodb.Client
+// UserRepository define o contrato de persistencia de usuarios.
+// Qualquer implementacao (DynamoDB, mock, etc.) pode satisfazer essa interface.
+type UserRepository interface {
+	Create(ctx context.Context, user entity.User) error
+	GetByID(ctx context.Context, id string) (*entity.User, error)
+	GetAll(ctx context.Context) ([]entity.User, error)
+	Update(ctx context.Context, id string, input entity.UpdateUserInput) error
+	Delete(ctx context.Context, id string) error
 }
 
-func NewUserRepository(client *dynamodb.Client) *UserRepository {
-	return &UserRepository{client: client}
+// DynamoUserRepository e a implementacao concreta do UserRepository usando DynamoDB.
+type DynamoUserRepository struct {
+	client    *dynamodb.Client
+	tableName string
 }
 
-// CreateTable cria a tabela "Users" no DynamoDB caso ela ainda nao exista.
+func NewUserRepository(client *dynamodb.Client, tableName string) *DynamoUserRepository {
+	return &DynamoUserRepository{client: client, tableName: tableName}
+}
+
+// CreateTable cria a tabela no DynamoDB caso ela ainda nao exista.
 //
 // No DynamoDB, toda tabela precisa de pelo menos uma chave primaria (partition key).
 // Aqui usamos o campo "id" como partition key (HASH), o que significa que cada item
@@ -37,9 +47,9 @@ func NewUserRepository(client *dynamodb.Client) *UserRepository {
 //
 // BillingMode PAY_PER_REQUEST = modo sob demanda (sem necessidade de provisionar capacidade).
 // Ideal para desenvolvimento local e cargas imprevisiveis.
-func (r *UserRepository) CreateTable(ctx context.Context) error {
+func (r *DynamoUserRepository) CreateTable(ctx context.Context) error {
 	_, err := r.client.CreateTable(ctx, &dynamodb.CreateTableInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(r.tableName),
 		KeySchema: []types.KeySchemaElement{
 			{
 				AttributeName: aws.String("id"),
@@ -79,14 +89,14 @@ func (r *UserRepository) CreateTable(ctx context.Context) error {
 //	    "id":   &types.AttributeValueMemberS{Value: "123"},
 //	    "name": &types.AttributeValueMemberS{Value: "Joao"},
 //	}
-func (r *UserRepository) Create(ctx context.Context, user entity.User) error {
+func (r *DynamoUserRepository) Create(ctx context.Context, user entity.User) error {
 	item, err := attributevalue.MarshalMap(user)
 	if err != nil {
 		return fmt.Errorf("erro ao serializar usuario: %w", err)
 	}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(r.tableName),
 		Item:      item,
 	})
 	if err != nil {
@@ -110,9 +120,9 @@ func (r *UserRepository) Create(ctx context.Context, user entity.User) error {
 //
 // attributevalue.UnmarshalMap faz o caminho inverso do MarshalMap:
 // converte o map[string]AttributeValue de volta para a struct Go.
-func (r *UserRepository) GetByID(ctx context.Context, id string) (*entity.User, error) {
+func (r *DynamoUserRepository) GetByID(ctx context.Context, id string) (*entity.User, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: id},
 		},
@@ -149,9 +159,9 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*entity.User, 
 //
 // attributevalue.UnmarshalListOfMaps converte a lista de items retornada pelo
 // DynamoDB para um slice de structs Go.
-func (r *UserRepository) GetAll(ctx context.Context) ([]entity.User, error) {
+func (r *DynamoUserRepository) GetAll(ctx context.Context) ([]entity.User, error) {
 	output, err := r.client.Scan(ctx, &dynamodb.ScanInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(r.tableName),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("erro ao listar usuarios: %w", err)
@@ -188,7 +198,7 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]entity.User, error) {
 //
 // ConditionExpression "attribute_exists(id)" garante que so atualizamos um item
 // que ja existe. Se o id nao for encontrado, o DynamoDB retorna ConditionalCheckFailedException.
-func (r *UserRepository) Update(ctx context.Context, id string, input entity.UpdateUserInput) error {
+func (r *DynamoUserRepository) Update(ctx context.Context, id string, input entity.UpdateUserInput) error {
 	update := expression.
 		Set(expression.Name("name"), expression.Value(input.Name)).
 		Set(expression.Name("email"), expression.Value(input.Email))
@@ -204,7 +214,7 @@ func (r *UserRepository) Update(ctx context.Context, id string, input entity.Upd
 	}
 
 	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: id},
 		},
@@ -232,9 +242,9 @@ func (r *UserRepository) Update(ctx context.Context, id string, input entity.Upd
 // Se quisermos garantir que o item existia antes de deletar, podemos adicionar
 // ConditionExpression: aws.String("attribute_exists(id)"), que faria o DynamoDB
 // retornar erro caso o item nao fosse encontrado.
-func (r *UserRepository) Delete(ctx context.Context, id string) error {
+func (r *DynamoUserRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: aws.String(tableName),
+		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: id},
 		},

@@ -1,6 +1,10 @@
 package entity
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type User struct {
 	ID        string `json:"id" dynamodbav:"id"`
@@ -21,7 +25,7 @@ type UpdateUserInput struct {
 
 func NewUser(name, email string) User {
 	return User{
-		ID:        "",
+		ID:        uuid.New().String(),
 		Name:      name,
 		Email:     email,
 		CreatedAt: time.Now().Format(time.RFC3339),
