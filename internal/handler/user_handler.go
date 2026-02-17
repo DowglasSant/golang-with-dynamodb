@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,6 +10,9 @@ import (
 	"github.com/dowglassantana/golang-with-dynamodb/internal/entity"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/service"
 )
+
+//go:embed static/index.html
+var indexHTML embed.FS
 
 type UserHandler struct {
 	service *service.UserService
@@ -19,6 +23,11 @@ func NewUserHandler(service *service.UserService) *UserHandler {
 }
 
 func (h *UserHandler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		data, _ := indexHTML.ReadFile("static/index.html")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(data)
+	})
 	mux.HandleFunc("POST /users", h.Create)
 	mux.HandleFunc("GET /users", h.GetAll)
 	mux.HandleFunc("GET /users/{id}", h.GetByID)

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Go + DynamoDB</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
+
+    h1 {
+      text-align: center;
+      font-size: 1.8rem;
+      margin-bottom: 0.25rem;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      text-align: center;
+      color: #64748b;
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid #334155;
+    }
+    .card h2 {
+      font-size: 1rem;
+      color: #94a3b8;
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .form-row input {
+      flex: 1;
+      padding: 0.6rem 0.9rem;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-row input:focus { border-color: #38bdf8; }
+    .form-row input::placeholder { color: #475569; }
+
+    button {
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      color: #0f172a;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.75rem;
+    }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-edit {
+      background: #f59e0b;
+      color: #0f172a;
+      padding: 0.4rem 0.7rem;
+      font-size: 0.75rem;
+    }
+    .btn-edit:hover { background: #d97706; }
+
+    .user-list { list-style: none; }
+    .user-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.8rem 1rem;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      border: 1px solid #1e293b;
+      transition: border-color 0.2s;
+    }
+    .user-item:hover { border-color: #334155; }
+    .user-info { flex: 1; }
+    .user-name { font-weight: 600; color: #f1f5f9; }
+    .user-email { font-size: 0.8rem; color: #64748b; }
+    .user-id { font-size: 0.7rem; color: #475569; font-family: monospace; }
+    .user-actions { display: flex; gap: 0.4rem; }
+
+    .empty {
+      text-align: center;
+      color: #475569;
+      padding: 2rem;
+      font-style: italic;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      padding: 0.8rem 1.2rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { background: #059669; color: white; }
+    .toast.error { background: #dc2626; color: white; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-left: 0.5rem;
+    }
+    .badge-aws { background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }
+    .badge-local { background: #38bdf822; color: #38bdf8; border: 1px solid #38bdf844; }
+
+    .stats {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .stat {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 0.6rem 1.2rem;
+      text-align: center;
+    }
+    .stat-value { font-size: 1.4rem; font-weight: 700; color: #38bdf8; }
+    .stat-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; }
+
+    .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #334155; border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Go + DynamoDB</h1>
+    <p class="subtitle">CRUD API rodando em ECS Fargate <span id="envBadge" class="badge"></span></p>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="userCount">-</div>
+        <div class="stat-label">Usuarios</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Novo Usuario</h2>
+      <div class="form-row">
+        <input type="text" id="inputName" placeholder="Nome">
+        <input type="email" id="inputEmail" placeholder="Email">
+        <button class="btn-primary" onclick="createUser()">Criar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Usuarios</h2>
+      <ul class="user-list" id="userList">
+        <li class="empty">Carregando...</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = window.location.origin;
+
+    async function loadUsers() {
+      try {
+        const res = await fetch(`${API}/users`);
+        const users = await res.json();
+        const list = document.getElementById('userList');
+        document.getElementById('userCount').textContent = users ? users.length : 0;
+
+        if (!users || users.length === 0) {
+          list.innerHTML = '<li class="empty">Nenhum usuario cadastrado</li>';
+          return;
+        }
+
+        list.innerHTML = users.map(u => `
+          <li class="user-item">
+            <div class="user-info">
+              <div class="user-name">${esc(u.name)}</div>
+              <div class="user-email">${esc(u.email)}</div>
+              <div class="user-id">${u.id}</div>
+            </div>
+            <div class="user-actions">
+              <button class="btn-edit" onclick="editUser('${u.id}', '${esc(u.name)}', '${esc(u.email)}')">Editar</button>
+              <button class="btn-danger" onclick="deleteUser('${u.id}')">Deletar</button>
+            </div>
+          </li>
+        `).join('');
+      } catch (e) {
+        document.getElementById('userList').innerHTML = '<li class="empty">Erro ao carregar</li>';
+      }
+    }
+
+    async function createUser() {
+      const name = document.getElementById('inputName').value.trim();
+      const email = document.getElementById('inputEmail').value.trim();
+      if (!name || !email) return toast('Preencha nome e email', 'error');
+
+      try {
+        const res = await fetch(`${API}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email })
+        });
+        if (!res.ok) throw new Error();
+        document.getElementById('inputName').value = '';
+        document.getElementById('inputEmail').value = '';
+        toast('Usuario criado!', 'success');
+        loadUsers();
+      } catch (e) { toast('Erro ao criar', 'error'); }
+    }
+
+    async function editUser(id, name, email) {
+      const newName = prompt('Nome:', name);
+      if (newName === null) return;
+      const newEmail = prompt('Email:', email);
+      if (newEmail === null) return;
+
+      try {
+        const res = await fetch(`${API}/users/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName, email: newEmail })
+        });
+        if (!res.ok) throw new Error();
+        toast('Usuario atualizado!', 'success');
+        loadUsers();
+      } catch (e) { toast('Erro ao atualizar', 'error'); }
+    }
+
+    async function deleteUser(id) {
+      if (!confirm('Deletar este usuario?')) return;
+      try {
+        await fetch(`${API}/users/${id}`, { method: 'DELETE' });
+        toast('Usuario deletado!', 'success');
+        loadUsers();
+      } catch (e) { toast('Erro ao deletar', 'error'); }
+    }
+
+    function toast(msg, type) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = `toast ${type} show`;
+      setTimeout(() => el.className = 'toast', 2500);
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    // Detectar ambiente
+    document.getElementById('envBadge').textContent = location.hostname === 'localhost' ? 'LOCAL' : 'AWS';
+    document.getElementById('envBadge').className = `badge ${location.hostname === 'localhost' ? 'badge-local' : 'badge-aws'}`;
+
+    loadUsers();
+  </script>
+</body>
+</html>
