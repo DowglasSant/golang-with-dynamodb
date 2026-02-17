@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/handler"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/repository"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/service"
@@ -15,7 +17,27 @@ import (
 func main() {
 	ctx := context.Background()
 
-	client, err := dynamo.NewLocalClient(ctx)
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "local"
+	}
+
+	var (
+		client *dynamodb.Client
+		err    error
+	)
+
+	switch env {
+	case "aws":
+		region := os.Getenv("AWS_REGION")
+		if region == "" {
+			region = "us-east-1"
+		}
+		client, err = dynamo.NewClient(ctx, region)
+	default:
+		client, err = dynamo.NewLocalClient(ctx)
+	}
+
 	if err != nil {
 		log.Fatalf("erro ao criar client DynamoDB: %v", err)
 	}
@@ -33,6 +55,6 @@ func main() {
 	userHandler.RegisterRoutes(mux)
 
 	addr := ":8080"
-	fmt.Printf("Servidor rodando em http://localhost%s\n", addr)
+	fmt.Printf("Servidor rodando em http://localhost%s (env=%s)\n", addr, env)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }

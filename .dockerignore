@@ -1,0 +1,7 @@
+.git
+.vscode
+.gitignore
+README.md
+docker-compose.yml
+postman_collection.json
+*.md
