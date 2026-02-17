@@ -10,16 +10,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/dowglassantana/golang-with-dynamodb/internal/entity"
+	"github.com/dowglassantana/golang-with-dynamodb/internal/model"
 )
 
 // UserRepository define o contrato de persistencia de usuarios.
 // Qualquer implementacao (DynamoDB, mock, etc.) pode satisfazer essa interface.
 type UserRepository interface {
-	Create(ctx context.Context, user entity.User) error
-	GetByID(ctx context.Context, id string) (*entity.User, error)
-	GetAll(ctx context.Context) ([]entity.User, error)
-	Update(ctx context.Context, id string, input entity.UpdateUserInput) error
+	Create(ctx context.Context, user model.User) error
+	GetByID(ctx context.Context, id string) (*model.User, error)
+	GetAll(ctx context.Context) ([]model.User, error)
+	Update(ctx context.Context, id string, input model.UpdateUserInput) error
 	Delete(ctx context.Context, id string) error
 }
 
@@ -83,14 +83,16 @@ func (r *DynamoUserRepository) CreateTable(ctx context.Context) error {
 // attributevalue.MarshalMap converte a struct Go para o formato map[string]AttributeValue
 // que o DynamoDB espera. Ele usa as tags `dynamodbav` da struct para mapear os campos.
 //
-// Exemplo: entity.User{ID: "123", Name: "Joao"} vira:
+// Exemplo: model.User{ID: "123", Name: "Joao"} vira:
 //
 //	map[string]AttributeValue{
 //	    "id":   &types.AttributeValueMemberS{Value: "123"},
 //	    "name": &types.AttributeValueMemberS{Value: "Joao"},
 //	}
-func (r *DynamoUserRepository) Create(ctx context.Context, user entity.User) error {
-	item, err := attributevalue.MarshalMap(user)
+func (r *DynamoUserRepository) Create(ctx context.Context, user model.User) error {
+	dm := toDynamo(user)
+
+	item, err := attributevalue.MarshalMap(dm)
 	if err != nil {
 		return fmt.Errorf("erro ao serializar usuario: %w", err)
 	}
@@ -120,7 +122,7 @@ func (r *DynamoUserRepository) Create(ctx context.Context, user entity.User) err
 //
 // attributevalue.UnmarshalMap faz o caminho inverso do MarshalMap:
 // converte o map[string]AttributeValue de volta para a struct Go.
-func (r *DynamoUserRepository) GetByID(ctx context.Context, id string) (*entity.User, error) {
+func (r *DynamoUserRepository) GetByID(ctx context.Context, id string) (*model.User, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
@@ -135,12 +137,13 @@ func (r *DynamoUserRepository) GetByID(ctx context.Context, id string) (*entity.
 		return nil, nil
 	}
 
-	var user entity.User
-	err = attributevalue.UnmarshalMap(output.Item, &user)
+	var dm userDynamo
+	err = attributevalue.UnmarshalMap(output.Item, &dm)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao desserializar usuario: %w", err)
 	}
 
+	user := dm.toUser()
 	return &user, nil
 }
 
@@ -159,7 +162,7 @@ func (r *DynamoUserRepository) GetByID(ctx context.Context, id string) (*entity.
 //
 // attributevalue.UnmarshalListOfMaps converte a lista de items retornada pelo
 // DynamoDB para um slice de structs Go.
-func (r *DynamoUserRepository) GetAll(ctx context.Context) ([]entity.User, error) {
+func (r *DynamoUserRepository) GetAll(ctx context.Context) ([]model.User, error) {
 	output, err := r.client.Scan(ctx, &dynamodb.ScanInput{
 		TableName: aws.String(r.tableName),
 	})
@@ -167,10 +170,15 @@ func (r *DynamoUserRepository) GetAll(ctx context.Context) ([]entity.User, error
 		return nil, fmt.Errorf("erro ao listar usuarios: %w", err)
 	}
 
-	var users []entity.User
-	err = attributevalue.UnmarshalListOfMaps(output.Items, &users)
+	var models []userDynamo
+	err = attributevalue.UnmarshalListOfMaps(output.Items, &models)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao desserializar usuarios: %w", err)
+	}
+
+	users := make([]model.User, len(models))
+	for i, m := range models {
+		users[i] = m.toUser()
 	}
 
 	return users, nil
@@ -198,7 +206,7 @@ func (r *DynamoUserRepository) GetAll(ctx context.Context) ([]entity.User, error
 //
 // ConditionExpression "attribute_exists(id)" garante que so atualizamos um item
 // que ja existe. Se o id nao for encontrado, o DynamoDB retorna ConditionalCheckFailedException.
-func (r *DynamoUserRepository) Update(ctx context.Context, id string, input entity.UpdateUserInput) error {
+func (r *DynamoUserRepository) Update(ctx context.Context, id string, input model.UpdateUserInput) error {
 	update := expression.
 		Set(expression.Name("name"), expression.Value(input.Name)).
 		Set(expression.Name("email"), expression.Value(input.Email))

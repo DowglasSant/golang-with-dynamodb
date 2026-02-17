@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/dowglassantana/golang-with-dynamodb/internal/entity"
+	"github.com/dowglassantana/golang-with-dynamodb/internal/model"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/service"
 )
 
@@ -41,7 +41,7 @@ func (h *UserHandler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var input entity.CreateUserInput
+	var input model.CreateUserInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "corpo da requisicao invalido"})
 		return
@@ -57,7 +57,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, user)
+	writeJSON(w, http.StatusCreated, toUserResponse(*user))
 }
 
 func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +73,7 @@ func (h *UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, user)
+	writeJSON(w, http.StatusOK, toUserResponse(*user))
 }
 
 func (h *UserHandler) GetAll(w http.ResponseWriter, r *http.Request) {
@@ -83,13 +83,13 @@ func (h *UserHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, users)
+	writeJSON(w, http.StatusOK, toUserResponseList(users))
 }
 
 func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	var input entity.UpdateUserInput
+	var input model.UpdateUserInput
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "corpo da requisicao invalido"})
 		return

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/dowglassantana/golang-with-dynamodb/internal/entity"
+	"github.com/dowglassantana/golang-with-dynamodb/internal/model"
 	"github.com/dowglassantana/golang-with-dynamodb/internal/repository"
 )
 
@@ -16,10 +16,10 @@ var (
 
 // UserService define o contrato de regras de negocio de usuarios.
 type UserService interface {
-	Create(ctx context.Context, input entity.CreateUserInput) (*entity.User, error)
-	GetByID(ctx context.Context, id string) (*entity.User, error)
-	GetAll(ctx context.Context) ([]entity.User, error)
-	Update(ctx context.Context, id string, input entity.UpdateUserInput) error
+	Create(ctx context.Context, input model.CreateUserInput) (*model.User, error)
+	GetByID(ctx context.Context, id string) (*model.User, error)
+	GetAll(ctx context.Context) ([]model.User, error)
+	Update(ctx context.Context, id string, input model.UpdateUserInput) error
 	Delete(ctx context.Context, id string) error
 }
 
@@ -31,12 +31,12 @@ func NewUserService(repo repository.UserRepository) UserService {
 	return &userServiceImpl{repo: repo}
 }
 
-func (s *userServiceImpl) Create(ctx context.Context, input entity.CreateUserInput) (*entity.User, error) {
+func (s *userServiceImpl) Create(ctx context.Context, input model.CreateUserInput) (*model.User, error) {
 	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Email) == "" {
 		return nil, ErrInvalidInput
 	}
 
-	user := entity.NewUser(input.Name, input.Email)
+	user := model.NewUser(input.Name, input.Email)
 
 	if err := s.repo.Create(ctx, user); err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func (s *userServiceImpl) Create(ctx context.Context, input entity.CreateUserInp
 	return &user, nil
 }
 
-func (s *userServiceImpl) GetByID(ctx context.Context, id string) (*entity.User, error) {
+func (s *userServiceImpl) GetByID(ctx context.Context, id string) (*model.User, error) {
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -56,11 +56,11 @@ func (s *userServiceImpl) GetByID(ctx context.Context, id string) (*entity.User,
 	return user, nil
 }
 
-func (s *userServiceImpl) GetAll(ctx context.Context) ([]entity.User, error) {
+func (s *userServiceImpl) GetAll(ctx context.Context) ([]model.User, error) {
 	return s.repo.GetAll(ctx)
 }
 
-func (s *userServiceImpl) Update(ctx context.Context, id string, input entity.UpdateUserInput) error {
+func (s *userServiceImpl) Update(ctx context.Context, id string, input model.UpdateUserInput) error {
 	if strings.TrimSpace(input.Name) == "" || strings.TrimSpace(input.Email) == "" {
 		return ErrInvalidInput
 	}
